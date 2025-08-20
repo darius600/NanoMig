@@ -1,4 +1,4 @@
-### ROMs from Cloanto
+### Kickstart ROMs from Cloanto
 
 * Cloanto is the copyright owner of the Amiga Kickstart ROMs.
   They sell the product [Amiga Forever](https://www.amigaforever.com/), which includes a large collection of Amiga ROMs.
@@ -10,7 +10,7 @@ See also the [Amiga Forever knowledge base](https://www.amigaforever.com/kb/16-1
 
 ---
 
-### ROMs reported as working by users
+### Kickstart ROMs reported as working by users
 
 Filename | Version / Rev | SHA256 | MD5 | Status
 -- | -- | -- | -- | --

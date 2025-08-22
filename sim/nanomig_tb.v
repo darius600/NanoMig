@@ -120,7 +120,9 @@ nanomig nanomig (
 		 .g(green),
 		 .b(blue),
 
-		 .joystick(6'b000000),
+		 .joystick0(6'b000000),
+ 		 .joystick1(6'b000000),
+
 		 
 		 // sd card interface for floppy disk emulation
 		 .sdc_img_mounted    ( sdc_img_mounted     ),

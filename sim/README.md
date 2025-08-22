@@ -51,11 +51,29 @@ video output of DiagROM is broken. However, UART output can be enabled
 allowing to see the initial diagnostic output of DiagROM.
 
 Further simulation features like e.g. floppy simulation may
-need addtional files like e.g. ADF disk images. See the
+need additional files like e.g. ADF disk images. See the
 [```nanomig_tb.cpp```](nanomig_tb.cpp) for details.
 
 With all dependencies in place a simple ```make run``` should build
-the simulatior and run it.
+the simulator and run it.
+
+### Verilator version notes
+
+Starting with Verilator 5.038 the default behavior for handling ```unique```
+statements changed: [verilator/verilator-announce#77](https://github.com/verilator/verilator-announce/issues/77).  
+Earlier versions did run without these assertions per default. 
+
+This will lead to the error when running the simulation:
+```
+[0] %Error: fx68kAlu.sv:313: Assertion failed in TOP.nanomig_tb.nanomig.cpu_wrapper.cpu_inst_o.excUnit.alu: unique case, but none matched for '32'h00000000'
+%Error: fx68x_verilator/fx68kAlu.sv:313: Verilog $stop
+```
+
+Workarounds are to use Verilator up to 5.036 or to add the parameter:
+`--no-assert` to the commandline of Verilator in the Makefile
+```
+verilator --no-assert -O3 -Wno-fatal --no-timing --trace --threads 1 --trace-underscore  -top-module \$(PRJ)\_tb \$(VERILATOR\_FLAGS) -cc \${HDL\_FILES} --exe \${CPP\_FILES} -o ../\$(PRJ) -CFLAGS "\${EXTRA\_CFLAGS}" -LDFLAGS "\${EXTRA\_LDFLAGS}"
+```
 
 ## Running traces
 

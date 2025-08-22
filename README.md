@@ -12,13 +12,14 @@ This is still a work in progress. The current version is based on the [MiSTer Mi
 Current state:
 
   * Minimig based on [MiSTer Minimig AGA](https://github.com/MiSTer-devel/Minimig-AGA_MiSTer)
+  * Amiga 500 and Amiga 1000 modes
   * Kick ROM stored in flash ROM
   * Up to 2MB chip and 1.5MB slow RAM
   * OCS and ECS chipset (no AGA!)
   * Up to four virtual floppy drives
   * HDMI video and audio, PAL and NTSC
-  * Keyboard, Mouse and Joystick via USB
-  * Virtual IDE hard disk read an write support
+  * Keyboard, mouse and joystick via USB
+  * Virtual IDE hard disk read and write support
   * Runs on [Tang Nano 20k](https://wiki.sipeed.com/hardware/en/tang/tang-nano-20k/nano-20k.html), [Primer 25K](https://wiki.sipeed.com/hardware/en/tang/tang-primer-25k/primer-25k.html), [Mega 138K Pro](https://wiki.sipeed.com/hardware/en/tang/tang-mega-138k/mega-138k-pro.html) and [Tang Console with Mega 60k module](https://wiki.sipeed.com/hardware/en/tang/tang-console/mega-console.html)
   * [Fully simulated](sim)
 
@@ -57,6 +58,7 @@ The necessary binaries can be found in the [project releases](https://github.com
   * On Nano 20k, Primer 25k and Console 60K Kickstart 1.3 ```kick13.rom``` needs to be flashed to offset 0x400000 _and_ 0x440000. On Mega 138K use addresses 0xc00000 and 0xc40000 instead.
     * ```openFPGALoader --external-flash -o 0x400000 kick13.rom```
     * ```openFPGALoader --external-flash -o 0x440000 kick13.rom```
+    See here for [checksums of known working Kickstart roms.](https://github.com/MiSTle-Dev/NanoMig/blob/main/doc/KICKSTART_ROMS.md)
   * For IDE HDD support Kickstart 3.1 ```kick31.rom``` needs to be flashed at offset 0x400000 (Mega: 0xc00000) only
     * ```openFPGALoader --external-flash -o 0x400000 kick31.rom```
   * The [latest FPGA Companion firmware](http://github.com/harbaum/FPGA-Companion) needs to be flashed to the support MCU

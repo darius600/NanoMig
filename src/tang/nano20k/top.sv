@@ -399,7 +399,7 @@ wire [14:0] audio_right;
 
             // map first HID/USB joystick into first amiga joystick port
             // wire in db9 joystick & mouse
-wire [7:0] physical_port_a = { 
+wire [7:0] physical_port_1 = { 
                hid_joy0[7], 
                hid_joy0[6], 
               (hid_joy0[5] | db9_joy[5]), 
@@ -411,7 +411,7 @@ wire [7:0] physical_port_a = {
 
             // map second HID/USB joystick into second amiga joystick port
             // wire in db9 joystick
-wire [7:0] physical_port_b = { 
+wire [7:0] physical_port_2 = { 
                hid_joy1[7], 
                hid_joy1[6], 
                hid_joy1[5], 
@@ -426,8 +426,8 @@ wire [7:0] joystick1;
 
 // Swap Joysticks 
 
-assign joystick0 = osd_joy_swap ? physical_port_b : physical_port_a;
-assign joystick1 = osd_joy_swap ? physical_port_a : physical_port_b;
+assign joystick0 = osd_joy_swap ? physical_port_2 : physical_port_1;
+assign joystick1 = osd_joy_swap ? physical_port_1 : physical_port_2;
 
 wire [23:1] cpu_a;
 wire cpu_as_n, cpu_lds_n, cpu_uds_n;

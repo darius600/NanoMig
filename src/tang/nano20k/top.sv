@@ -426,8 +426,8 @@ wire [7:0] joystick1;
 
 // Swap Joysticks 
 
-assign joystick0 = osd_joy_swap ? physical_port_2 : physical_port_1;
-assign joystick1 = osd_joy_swap ? physical_port_1 : physical_port_2;
+assign joystick0 = osd_joy_swap ? physical_port_1 : physical_port_2;
+assign joystick1 = osd_joy_swap ? physical_port_2 : physical_port_1;
 
 wire [23:1] cpu_a;
 wire cpu_as_n, cpu_lds_n, cpu_uds_n;

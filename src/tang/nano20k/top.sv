@@ -137,6 +137,7 @@ wire [1:0] osd_chipset;         // 0=OCS-A500, 1=OCS-A1000, 2=ECS
 wire       osd_video_mode;      // PAL (0=PAL, 1=NTSC)
 wire [1:0] osd_video_filter;
 wire [1:0] osd_video_scanlines;
+wire       osd_joy_swap;        // 0=off, 1=on
 
 // generate a reset for some time after rom has been initialized
 reg [15:0] reset_cnt;
@@ -346,6 +347,7 @@ sysctrl sysctrl (
 		.system_video_scanlines(osd_video_scanlines),
 		.system_chipmem(osd_chipmem),
 		.system_slowmem(osd_slowmem),
+        .system_joy_swap(osd_joy_swap),
 				 
         .int_out_n(spi_intn),
         .int_in( { 4'b0000, sdc_int, 1'b0, hid_int, 1'b0 }),
@@ -392,29 +394,40 @@ osd_u8g2 osd_u8g2 (
 wire [14:0] audio_left;
 wire [14:0] audio_right;   
 
-// map first HID/USB joystick into first amiga joystick port
-// wire in db9 joystick & mouse
-wire [7:0] joystick1 = { 
-	   hid_joy0[7], 
-	   hid_joy0[6], 
-	  (hid_joy0[5] | db9_joy[5]), 
-	  (hid_joy0[4] | db9_joy[4]),
-	  (hid_joy0[3] | db9_joy[3]), 
-	  (hid_joy0[2] | db9_joy[2]),
-	  (hid_joy0[1] | db9_joy[1]),
-	  (hid_joy0[0] | db9_joy[0]) };   
 
-// map second HID/USB joystick into second amiga joystick port
-// wire in db9 joystick   
-wire [7:0] joystick0 = { 
-       hid_joy1[7], 
-       hid_joy1[6], 
-       hid_joy1[5], 
-      (hid_joy1[4] | db9_joy2[4]),
-      (hid_joy1[3] | db9_joy2[3]), 
-      (hid_joy1[2] | db9_joy2[2]),
-      (hid_joy1[1] | db9_joy2[1]),
-      (hid_joy1[0] | db9_joy2[0]) }; 
+// Map Joysticks 
+
+            // map first HID/USB joystick into first amiga joystick port
+            // wire in db9 joystick & mouse
+wire [7:0] physical_port_a = { 
+               hid_joy0[7], 
+               hid_joy0[6], 
+              (hid_joy0[5] | db9_joy[5]), 
+              (hid_joy0[4] | db9_joy[4]),
+              (hid_joy0[3] | db9_joy[3]), 
+              (hid_joy0[2] | db9_joy[2]),
+              (hid_joy0[1] | db9_joy[1]),
+              (hid_joy0[0] | db9_joy[0]) };   
+
+            // map second HID/USB joystick into second amiga joystick port
+            // wire in db9 joystick
+wire [7:0] physical_port_b = { 
+               hid_joy1[7], 
+               hid_joy1[6], 
+               hid_joy1[5], 
+              (hid_joy1[4] | db9_joy2[4]),
+              (hid_joy1[3] | db9_joy2[3]), 
+              (hid_joy1[2] | db9_joy2[2]),
+              (hid_joy1[1] | db9_joy2[1]),
+              (hid_joy1[0] | db9_joy2[0]) }; 
+              
+wire [7:0] joystick0;
+wire [7:0] joystick1;
+
+// Swap Joysticks 
+
+assign joystick0 = osd_joy_swap ? physical_port_b : physical_port_a;
+assign joystick1 = osd_joy_swap ? physical_port_a : physical_port_b;
 
 wire [23:1] cpu_a;
 wire cpu_as_n, cpu_lds_n, cpu_uds_n;

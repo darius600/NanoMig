@@ -36,7 +36,8 @@ module sysctrl (
   output reg [1:0]  system_video_filter,
   output reg [1:0]  system_video_scanlines,
   output reg [1:0]  system_chipmem,
-  output reg [1:0]  system_slowmem
+  output reg [1:0]  system_slowmem,
+  output reg        system_joy_swap
 );
 
 reg [3:0] state;
@@ -103,8 +104,11 @@ always @(posedge clk) begin
       system_video_scanlines <= 2'd0;      
       system_chipmem <= 2'd0;      
       system_slowmem <= 2'd1;      
-      system_ide_enable <= 1'b0;      
-   end else begin // if (reset)
+      system_ide_enable <= 1'b0;
+      system_joy_swap <= 1'b0;      
+   end 
+   else 
+   begin // if (reset)
       //  bring button state into local clock domain
       buttonsD <= buttons;
       buttonsD2 <= buttonsD;
@@ -205,6 +209,8 @@ always @(posedge clk) begin
 		   if(id == "X") system_slowmem <= data_in[1:0];
 		   // Value "I": IDE disabled(0) or enabled(1)
 		   if(id == "I") system_ide_enable <= data_in[0];
+           // value "&": Swap Joyst off(0) on(1)
+           if(id == "&") system_joy_swap <= data_in[0];
                 end
             end
 

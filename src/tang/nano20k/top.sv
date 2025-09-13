@@ -49,7 +49,7 @@ module top(
   input [5:0]	io,
 
   // spare IO, used for 2nd joystick
-  input [4:0]   spare,
+  input [5:0]   spare,
 
   // interface to external BL616/M0S
   inout [4:0]	m0s,
@@ -86,7 +86,7 @@ assign bl616_mon_tx = uart_rx;
 wire [5:0] db9_joy = { !io[5], !io[0], !io[2], !io[1], !io[4], !io[3] };   
 
 // physcial dsub9 joystick port 2  
-wire [4:0] db9_joy2 = { !spare[0], !spare[2], !spare[1], !spare[4], !spare[3] }; 
+wire [5:0] db9_joy2 = { !spare[5], !spare[0], !spare[2], !spare[1], !spare[4], !spare[3] }; 
    
 wire [5:0]	leds;
 assign leds[5] = 1'b0;
@@ -394,7 +394,6 @@ osd_u8g2 osd_u8g2 (
 wire [14:0] audio_left;
 wire [14:0] audio_right;   
 
-
 // Map Joysticks 
 
             // map first HID/USB joystick into first amiga joystick port
@@ -414,7 +413,7 @@ wire [7:0] physical_port_1 = {
 wire [7:0] physical_port_2 = { 
                hid_joy1[7], 
                hid_joy1[6], 
-               hid_joy1[5], 
+			  (hid_joy1[5] | db9_joy2[5]),
               (hid_joy1[4] | db9_joy2[4]),
               (hid_joy1[3] | db9_joy2[3]), 
               (hid_joy1[2] | db9_joy2[2]),

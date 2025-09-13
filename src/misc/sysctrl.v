@@ -70,7 +70,7 @@ reg [11:0] menu_rom_addr;
 reg  [7:0] menu_rom_data;
 
 // generate hex e.g.: 
-// gzip -n amiga.xml
+// gzip -nc amiga.xml > amiga.xml.gz
 // xxd -c1 -p amiga.xml.gz > amiga_xml.hex
 reg [7:0] amiga_xml[1024];
 initial $readmemh("amiga_xml.hex", amiga_xml);
@@ -105,7 +105,7 @@ always @(posedge clk) begin
       system_chipmem <= 2'd0;      
       system_slowmem <= 2'd1;      
       system_ide_enable <= 1'b0;
-      system_joy_swap <= 1'b0;      
+      system_joy_swap <= 1'b1;
    end 
    else 
    begin // if (reset)
@@ -195,7 +195,7 @@ always @(posedge clk) begin
 		   if(id == "D") system_floppy_drives <= data_in[1:0];
 		   // Value "S": normal(0) or turbo(1) floppy
 		   if(id == "S") system_floppy_turbo <= data_in[0];
-		   // Value C": chipset OCS-A500(0), OCS-A1000(1) or ECS(2)
+		   // Value "C": chipset OCS-A500(0), OCS-A1000(1) or ECS(2)
 		   if(id == "C") system_chipset <= data_in[1:0];
 		   // Value "F": video filter none(0), h(1), v(2) or h+v(3)
 		   if(id == "F") system_video_filter <= data_in[1:0];
@@ -209,8 +209,8 @@ always @(posedge clk) begin
 		   if(id == "X") system_slowmem <= data_in[1:0];
 		   // Value "I": IDE disabled(0) or enabled(1)
 		   if(id == "I") system_ide_enable <= data_in[0];
-           // value "&": Swap Joyst off(0) on(1)
-           if(id == "&") system_joy_swap <= data_in[0];
+		   // value "J": Swap Joyst off(0) on(1)
+		   if(id == "J") system_joy_swap <= data_in[0];
                 end
             end
 

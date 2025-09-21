@@ -80,10 +80,10 @@ add_file src/tang/mega138k/gowin_clkdiv/gowin_clkdiv.v
 add_file src/tang/mega138k/gowin_pll/pll_142m.v
 add_file src/tang/mega138k/gowin_dpb/sector_dpram.v
 add_file src/tang/mega138k/gowin_dpb/ide_dpram.v
-add_file src/tang/mega138k/top.sv
+add_file src/tang/mega138kpro_bl616/top.sv
 add_file src/tang/mega138k/sdram.v
-add_file src/tang/mega138k/nanomig.cst
-add_file src/tang/mega138k/nanomig.sdc
+add_file src/tang/mega138kpro_bl616/nanomig.cst
+add_file src/tang/mega138kpro_bl616/nanomig.sdc
 add_file src/fx68k/microrom.mem
 add_file src/fx68k/nanorom.mem
 add_file src/tg68k/TG68K_Pack.vhd
@@ -93,7 +93,7 @@ add_file src/tg68k/TG68KdotC_Kernel.vhd
 add_file src/misc/amiga_xml.hex
 
 set_option -synthesis_tool gowinsynthesis
-set_option -output_base_name nanomig_tm138k
+set_option -output_base_name nanomig_tm138kpro_bl616
 set_option -verilog_std sysv2017
 set_option -top_module top
 set_option -use_mspi_as_gpio 1
@@ -101,7 +101,7 @@ set_option -use_sspi_as_gpio 1
 set_option -use_done_as_gpio 1
 set_option -use_cpu_as_gpio 1
 set_option -use_ready_as_gpio 1
-set_option -use_jtag_as_gpio 0
+set_option -use_jtag_as_gpio 1
 set_option -use_mode_as_gpio 0
 set_option -use_i2c_as_gpio 0
 set_option -bit_compress 1

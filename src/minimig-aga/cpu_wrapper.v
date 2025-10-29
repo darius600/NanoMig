@@ -154,7 +154,7 @@ reg  [31:0] vbr;
 
 always @* begin
 `ifdef CPU_SWITCHABLE
-   if( cpucfg[1] ) begin
+   if( cpucfg[1:0] ) begin
 `endif
 `ifdef ENABLE_TG68K      
 		cpu_dout     = cpu_dout_p;

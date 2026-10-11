@@ -151,7 +151,7 @@
     </list>
       <!--END-->
       <!--IS tang_nano20k_020_drv_snd --> 
-      <list label="Drive Sounds:" id="Z" default="0">
+      <list label="Drive Sounds:" id="E" default="0">
 		<listentry label="Disabled" value="0"/>
 		<listentry label="Enabled" value="1"/>
 	    </list>

@@ -18,18 +18,21 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.      //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
+// This is the bitplane parallel to serial converter & scroller               //
 //                                                                            //
-`ifdef DENISE_EBR
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
 // Copyright 2026 Mateusz Nalewajski                                          //
 // This is EBR refactor of bitplane parallel to serial converter & scroller   //
 //                                                                            //
 // The BRAM read pointer, shift index and shift/load timing are identical for //
 // every plane, so they are generated once in denise_bitplanes and fed in     //
 // here as shift / shifter_load / ram_addra / ram_addrb. This module keeps    //
-// only the per-plane data path (its own BRAM, shifter, scroller and output). //
+// only the per-plane data path (its own BRAM, shifter and output). //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
+`ifdef DENISE_EBR
 
 module denise_bitplane_shifter
 (
@@ -48,15 +51,14 @@ module denise_bitplane_shifter
   input  wire           shres,        // super high resolution select (takes priority over hires)
   input  wire           aga,          // AGA enabled
   input  wire [  8-1:0] scroll,       // scrolling value
+  input  wire           scroller_out, // shared circular-history read
+  output wire           scroller_in,  // current bit entering history
   output wire           out           // shift register output
 );
 
 
 // local signals
 reg  [ 8-1:0] shifter;            // main shifter
-reg  [64-1:0] scroller;           // scroller shifter
-reg  [ 6-1:0] select;             // shifter pixel select
-wire          scroller_out;       // scroller output
 reg  [ 8-1:0] sh_scroller;        // superhires scroller
 reg  [ 3-1:0] sh_select;          // superhires scroller pixel select
 
@@ -104,19 +106,6 @@ always @(posedge clk)
   if (ld_start)
     ram_bufb <= ram_bufa;
 
-// shifter pixel select (scroll is per-plane, so this stays local)
-always @ (*) begin
-  if (shres)
-    // super hires mode
-    select[5:0] = scroll[5:0] & fmode_mask;
-  else if (hires)
-    // hires mode
-    select[5:0] = scroll[6:1] & fmode_mask;
-  else
-    // lowres mode
-    select[5:0] = scroll[7:2] & fmode_mask;
-end
-
 // main shifter
 always @ (posedge clk) begin
   if (shifter_load)
@@ -127,15 +116,7 @@ always @ (posedge clk) begin
     shifter[7:0] <= {shifter[6:0], 1'b0};
 end
 
-// main scroller
-always @ (posedge clk) begin
-  if (shift)
-    // shift scroller data
-    scroller[63:0] <= {scroller[62:0], shifter[7]};
-end
-
-// main scroller output
-assign scroller_out = scroller[select];
+assign scroller_in = shifter[7];
 
 // superhires scroller control
 always @ (*) begin
@@ -158,10 +139,6 @@ assign out = sh_scroller[sh_select];
 endmodule
 
 `else
-// This is the bitplane parallel to serial converter & scroller               //
-//                                                                            //
-////////////////////////////////////////////////////////////////////////////////
-
 
 module denise_bitplane_shifter
 (
@@ -176,48 +153,28 @@ module denise_bitplane_shifter
   input  wire           aga,
   input  wire [ 64-1:0] data_in,  // parallel load data input
   input  wire [  8-1:0] scroll,   // scrolling value
+  input  wire           scroller_out, // shared circular-history read
+  output wire           scroller_in,  // current bit entering history
   output                out       // shift register output
 );
 
 
 // local signals
-reg  [ 6-1:0] fmode_mask;         // fetchmode mask
 reg  [64-1:0] shifter;            // main shifter
-reg  [64-1:0] scroller;           // scroller shifter
 reg           shift;              // shifter enable
-reg  [ 6-1:0] select;             // shifter pixel select
-wire          scroller_out;       // scroller output
 reg  [ 8-1:0] sh_scroller;        // superhires scroller
 reg  [ 3-1:0] sh_select;          // superhires scroller pixel select
 
 
-// fetchmode mask
+// main shifter control
 always @ (*) begin
-  case(fmode[1:0])
-    2'b00 : fmode_mask = 6'b00_1111;
-    2'b01,
-    2'b10 : fmode_mask = 6'b01_1111;
-    2'b11 : fmode_mask = 6'b11_1111;
-  endcase
+  if (shres)
+    shift = 1'b1;
+  else if (hires)
+    shift = ~c1 ^ c3;
+  else
+    shift = ~c1 & ~c3;
 end
-
-// main shifter and scroller control
-always @ (*) begin
-  if (shres) begin
-    // super hires mode
-    shift = 1'b1; // shifter always enabled
-    select[5:0] = scroll[5:0] & fmode_mask;
-  end else if (hires) begin
-    // hires mode
-    shift = ~c1 ^ c3; // shifter enabled every other clock cycle
-    select[5:0] = scroll[6:1] & fmode_mask;
-  end else begin
-    // lowres mode
-    shift = ~c1 & ~c3; // shifter enabled once every 4 clock cycles
-    select[5:0] = scroll[7:2] & fmode_mask;
-  end
-end
-
 
 // main shifter
 always @ (posedge clk) begin
@@ -231,18 +188,7 @@ always @ (posedge clk) begin
 end
 
 
-// main scroller
-always @ (posedge clk) begin
-  if (shift) begin
-    // shift scroller data
-    scroller[63:0] <= {scroller[62:0],shifter[63]};
-  end
-end
-
-
-// main scroller output
-assign scroller_out = scroller[select];
-
+assign scroller_in = shifter[63];
 
 // superhires scroller control // TODO test if this is correct
 always @ (*) begin
@@ -251,7 +197,7 @@ always @ (*) begin
   end else if (hires) begin
     sh_select = {aga, scroll[0], 1'b1}; // MSB bit should probably be 0, this is a hack for kickstart screen ...
   end else begin
-    sh_select = {aga, scroll[1:0]};
+    sh_select = {1'b0, scroll[1:0]} + (aga ? 3'd3 : 3'b0);
   end
 end
 

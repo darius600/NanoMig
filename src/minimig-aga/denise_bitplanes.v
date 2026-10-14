@@ -21,15 +21,15 @@
 // It accepts data from the bus and converts it to serial video data (6 bits).
 // It supports all ocs modes and also handles the pf1<->pf2 priority handling in
 // a seperate module.
-
-`ifdef DENISE_EBR
 // ----------------------------------------------------------------------------
 // Copyright 2026 Mateusz Nalewajski
 //
 // This is EBR refactor of bitplanes to optimize FF resource usage on
 // ECP5 platform; with a valid BRAM primitive can be adapted to other FPGAs
 // ----------------------------------------------------------------------------
-`endif
+
+`ifdef DENISE_EBR
+// EBR implementation: block RAM buffers and narrow shifters.
 
 module denise_bitplanes
 (
@@ -41,7 +41,6 @@ module denise_bitplanes
   input   aga,
   input   [8:1] reg_address_in,   // register address
   input   [15:0] data_in,       // bus data in
-`ifdef DENISE_EBR
   input   [15:0] chip16_r,
   input   [1:0] chip16_idx,
   input   hires,             // high resolution mode select
@@ -93,49 +92,6 @@ assign selbpl5 = selbplx && reg_address_in[3:1]==3'd4;
 assign selbpl6 = selbplx && reg_address_in[3:1]==3'd5;
 assign selbpl7 = selbplx && reg_address_in[3:1]==3'd6;
 assign selbpl8 = selbplx && reg_address_in[3:1]==3'd7;
-`else
-  input   [48-1:0] chip48,  // big chipram read
-  input   hires,             // high resolution mode select
-  input   shres,             // super high resolution mode select
-  input  [8:0] hpos,        // horizontal position (70ns resolution)
-  output   [8:1] bpldata      // bitplane data out
-);
-
-
-//register names and adresses
-parameter BPLCON1 = 9'h102;
-parameter BPL1DAT = 9'h110;
-parameter BPL2DAT = 9'h112;
-parameter BPL3DAT = 9'h114;
-parameter BPL4DAT = 9'h116;
-parameter BPL5DAT = 9'h118;
-parameter BPL6DAT = 9'h11a;
-parameter BPL7DAT = 9'h11c;
-parameter BPL8DAT = 9'h11e;
-parameter FMODE   = 9'h1fc;
-
-//local signals
-reg   [15:0] bplcon1;    // bplcon1 register
-reg   [15:0] fmode;     // fmod reg
-reg    [63:0] bpl1dat;    // buffer register for bit plane 2
-reg    [63:0] bpl2dat;    // buffer register for bit plane 2
-reg    [63:0] bpl3dat;    // buffer register for bit plane 3
-reg    [63:0] bpl4dat;    // buffer register for bit plane 4
-reg    [63:0] bpl5dat;    // buffer register for bit plane 5
-reg    [63:0] bpl6dat;    // buffer register for bit plane 6
-reg    [63:0] bpl7dat;    // buffer register for bit plane 5
-reg    [63:0] bpl8dat;    // buffer register for bit plane 6
-reg    load;        // bpl1dat written => load shif registers
-
-reg    [7:0] extra_delay_f0;  // extra delay when not alligned ddfstart
-reg    [7:0] extra_delay_f12;
-reg    [7:0] extra_delay_f3;
-reg    [7:0] extra_delay_r;
-reg    [7:0] pf1h;      // playfield 1 horizontal scroll
-reg    [7:0] pf2h;      // playfield 2 horizontal scroll
-reg    [7:0] pf1h_del;    // delayed playfield 1 horizontal scroll
-reg    [7:0] pf2h_del;    // delayed playfield 2 horizontal scroll
-`endif
 
 //--------------------------------------------------------------------------------------
 
@@ -152,7 +108,6 @@ always @(hpos)
   endcase
 
 always @(hpos)
-`ifdef DENISE_EBR
   case (hpos[4:3]) // AMR - FIXME - will probably need to adjust these too.
     2'b00 : extra_delay_f12 = 8'b00_0000_00;
     2'b01 : extra_delay_f12 = 8'b01_1000_00;
@@ -178,21 +133,6 @@ always @(hpos)
     4'b1101 : extra_delay_f3 = 8'b00_1100_00;
     4'b1110 : extra_delay_f3 = 8'b00_1000_00;
     4'b1111 : extra_delay_f3 = 8'b00_0100_00;
-`else
-  case (hpos[4:3])
-    2'b00 : extra_delay_f12 = 8'b00_0000_00;
-    2'b01 : extra_delay_f12 = 8'b01_1000_00;
-    2'b10 : extra_delay_f12 = 8'b01_0000_00;
-    2'b11 : extra_delay_f12 = 8'b00_1000_00;
-  endcase
-
-always @(hpos)
-  case (hpos[5:4])
-    2'b00 : extra_delay_f3 = 8'b00_0000_00;
-    2'b01 : extra_delay_f3 = 8'b11_0000_00;
-    2'b10 : extra_delay_f3 = 8'b10_0000_00;
-    2'b11 : extra_delay_f3 = 8'b01_0000_00;
-`endif
   endcase
 
 always @ (posedge clk) begin
@@ -244,7 +184,6 @@ always @ (posedge clk) begin
   end
 end
 
-`ifdef DENISE_EBR
 //--------------------------------------------------------------------------------------
 // shared bitplane-shifter control
 //
@@ -335,6 +274,22 @@ end
 
 //--------------------------------------------------------------------------------------
 
+// Shared scrolling history, split by playfield to give each RAM one read tap.
+wire [8:1] scroller_in;
+wire [8:1] scroller_out;
+
+wire [5:0] select1 = (shres ? pf1h_del[5:0] : hires ? pf1h_del[6:1] : pf1h_del[7:2]) & fmode_mask;
+wire [5:0] select2 = (shres ? pf2h_del[5:0] : hires ? pf2h_del[6:1] : pf2h_del[7:2]) & fmode_mask;
+
+denise_scroll_history history (
+  .clk(clk),
+  .shift(shift),
+  .pixel(scroller_in),
+  .select1(select1),
+  .select2(select2),
+  .out(scroller_out)
+);
+
 //instantiate the 8 bitplane parallel to serial converters; odd planes scroll
 //with playfield 1, even planes with playfield 2. All shared control is wired
 //in identically; only aen, scroll and out differ per plane.
@@ -360,11 +315,161 @@ generate
       .shres(shres),
       .aga(aga),
       .scroll((i % 2) ? pf1h_del : pf2h_del),  // odd plane -> pf1, even -> pf2
+      .scroller_in(scroller_in[i]),
+      .scroller_out(scroller_out[i]),
       .out(bpldata[i])
     );
   end
 endgenerate
+
+endmodule
+
 `else
+// Non-EBR implementation: register buffers and wide shifters.
+
+module denise_bitplanes
+(
+  input   clk,             // system bus clock
+  input   clk7_en,
+  input   reset,
+  input   c1,            // 35ns clock enable signals (for synchronization with clk)
+  input   c3,
+  input   aga,
+  input   [8:1] reg_address_in,   // register address
+  input   [15:0] data_in,       // bus data in
+  input   [48-1:0] chip48,  // big chipram read
+  input   hires,             // high resolution mode select
+  input   shres,             // super high resolution mode select
+  input  [8:0] hpos,        // horizontal position (70ns resolution)
+  output   [8:1] bpldata      // bitplane data out
+);
+
+
+//register names and adresses
+parameter BPLCON1 = 9'h102;
+parameter BPL1DAT = 9'h110;
+parameter BPL2DAT = 9'h112;
+parameter BPL3DAT = 9'h114;
+parameter BPL4DAT = 9'h116;
+parameter BPL5DAT = 9'h118;
+parameter BPL6DAT = 9'h11a;
+parameter BPL7DAT = 9'h11c;
+parameter BPL8DAT = 9'h11e;
+parameter FMODE   = 9'h1fc;
+
+//local signals
+reg   [15:0] bplcon1;    // bplcon1 register
+reg   [15:0] fmode;     // fmod reg
+reg    [63:0] bpl1dat;    // buffer register for bit plane 2
+reg    [63:0] bpl2dat;    // buffer register for bit plane 2
+reg    [63:0] bpl3dat;    // buffer register for bit plane 3
+reg    [63:0] bpl4dat;    // buffer register for bit plane 4
+reg    [63:0] bpl5dat;    // buffer register for bit plane 5
+reg    [63:0] bpl6dat;    // buffer register for bit plane 6
+reg    [63:0] bpl7dat;    // buffer register for bit plane 5
+reg    [63:0] bpl8dat;    // buffer register for bit plane 6
+reg    load;        // bpl1dat written => load shif registers
+
+reg    [7:0] extra_delay_f0;  // extra delay when not alligned ddfstart
+reg    [7:0] extra_delay_f12;
+reg    [7:0] extra_delay_f3;
+reg    [7:0] extra_delay_r;
+reg    [7:0] pf1h;      // playfield 1 horizontal scroll
+reg    [7:0] pf2h;      // playfield 2 horizontal scroll
+reg    [7:0] pf1h_del;    // delayed playfield 1 horizontal scroll
+reg    [7:0] pf2h_del;    // delayed playfield 2 horizontal scroll
+
+//--------------------------------------------------------------------------------------
+
+// horizontal scroll depends on horizontal position when BPL0DAT in written
+// visible display scroll is updated on fetch boundaries
+// increasing scroll value during active display inserts blank pixels
+
+always @(hpos)
+  case (hpos[3:2])
+    2'b00 : extra_delay_f0 = 8'b00_0000_00;
+    2'b01 : extra_delay_f0 = 8'b00_1100_00;
+    2'b10 : extra_delay_f0 = 8'b00_1000_00;
+    2'b11 : extra_delay_f0 = 8'b00_0100_00;
+  endcase
+
+always @(hpos)
+  case (hpos[4:3]) // AMR - FIXME - will probably need to adjust these too.
+    2'b00 : extra_delay_f12 = 8'b00_0000_00;
+    2'b01 : extra_delay_f12 = 8'b01_1000_00;
+    2'b10 : extra_delay_f12 = 8'b01_0000_00;
+    2'b11 : extra_delay_f12 = 8'b00_1000_00;
+  endcase
+
+always @(hpos)
+  case (hpos[5:2]) // AMR - adjust fetch offsets
+    4'b0000 : extra_delay_f3 = 8'b00_0000_00;
+    4'b0001 : extra_delay_f3 = 8'b11_1100_00;
+    4'b0010 : extra_delay_f3 = 8'b11_1000_00;
+    4'b0011 : extra_delay_f3 = 8'b11_0100_00;
+    4'b0100 : extra_delay_f3 = 8'b11_0000_00;
+    4'b0101 : extra_delay_f3 = 8'b10_1100_00;
+    4'b0110 : extra_delay_f3 = 8'b10_1000_00;
+    4'b0111 : extra_delay_f3 = 8'b10_0100_00;
+    4'b1000 : extra_delay_f3 = 8'b10_0000_00;
+    4'b1001 : extra_delay_f3 = 8'b01_1100_00;
+    4'b1010 : extra_delay_f3 = 8'b01_1000_00;
+    4'b1011 : extra_delay_f3 = 8'b01_0100_00;
+    4'b1100 : extra_delay_f3 = 8'b01_0000_00;
+    4'b1101 : extra_delay_f3 = 8'b00_1100_00;
+    4'b1110 : extra_delay_f3 = 8'b00_1000_00;
+    4'b1111 : extra_delay_f3 = 8'b00_0100_00;
+  endcase
+
+always @ (posedge clk) begin
+  if (clk7_en) begin
+    if (load) extra_delay_r <= #1 (fmode[1:0] == 2'b00) ? extra_delay_f0 : (fmode[1:0] == 2'b11) ? extra_delay_f3 : extra_delay_f12;
+  end
+end
+
+//playfield 1 effective horizontal scroll
+always @(posedge clk)
+  if (clk7_en) begin
+    if (load)
+      pf1h <= {bplcon1[11:10],bplcon1[3:0],bplcon1[9:8]};
+  end
+
+always @(posedge clk)
+  if (clk7_en) begin
+    pf1h_del <= pf1h + extra_delay_r;
+  end
+
+//playfield 2 effective horizontal scroll
+always @(posedge clk)
+  if (clk7_en) begin
+    if (load)
+      pf2h <= {bplcon1[15:14],bplcon1[7:4],bplcon1[13:12]};
+  end
+
+always @(posedge clk)
+  if (clk7_en) begin
+    pf2h_del <= pf2h + extra_delay_r;
+  end
+
+//writing bplcon1 register : horizontal scroll codes for even and odd bitplanes
+always @(posedge clk)
+  if (clk7_en) begin
+    if (reset)
+      bplcon1 <= #1 16'h3300;
+    if ((reg_address_in[8:1] == BPLCON1[8:1]))
+      bplcon1 <= #1 aga ? data_in[15:0] : {2'b00,2'b11,2'b00,2'b11,data_in[7:0]};
+  end
+
+// fmode
+always @ (posedge clk) begin
+  if (clk7_en) begin
+    if (reset)
+      fmode <= #1 16'h0000;
+    else if (aga && (reg_address_in[8:1] == FMODE[8:1]))
+      fmode <= #1 data_in;
+  end
+end
+
 reg [47:0] chip48_fmode=0;
 always @ (*) begin
   case (fmode[1:0])
@@ -442,6 +547,41 @@ always @(posedge clk)
 
 //--------------------------------------------------------------------------------------
 
+// Shared fetch mask and history enable match the per-plane shifter timing.
+reg [5:0] fmode_mask;
+reg shift;
+
+always @ (*) begin
+  case (fmode[1:0])
+    2'b00 : fmode_mask = 6'b00_1111;
+    2'b01,
+    2'b10 : fmode_mask = 6'b01_1111;
+    2'b11 : fmode_mask = 6'b11_1111;
+  endcase
+end
+
+always @ (*) begin
+  if (shres)      shift = 1'b1;
+  else if (hires) shift = ~c1 ^ c3;
+  else            shift = ~c1 & ~c3;
+end
+
+// Shared scrolling history, split by playfield to give each RAM one read tap.
+wire [8:1] scroller_in;
+wire [8:1] scroller_out;
+
+wire [5:0] select1 = (shres ? pf1h_del[5:0] : hires ? pf1h_del[6:1] : pf1h_del[7:2]) & fmode_mask;
+wire [5:0] select2 = (shres ? pf2h_del[5:0] : hires ? pf2h_del[6:1] : pf2h_del[7:2]) & fmode_mask;
+
+denise_scroll_history history (
+  .clk(clk),
+  .shift(shift),
+  .pixel(scroller_in),
+  .select1(select1),
+  .select2(select2),
+  .out(scroller_out)
+);
+
 //instantiate bitplane 1 parallel to serial converters, this plane is loaded directly from bus
 denise_bitplane_shifter bplshft1
 (
@@ -456,6 +596,8 @@ denise_bitplane_shifter bplshft1
   .aga(aga),
   .data_in(bpl1dat),
   .scroll(pf1h_del),
+  .scroller_in(scroller_in[1]),
+  .scroller_out(scroller_out[1]),
   .out(bpldata[1])
 );
 
@@ -473,6 +615,8 @@ denise_bitplane_shifter bplshft2
   .aga(aga),
   .data_in(bpl2dat),
   .scroll(pf2h_del),
+  .scroller_in(scroller_in[2]),
+  .scroller_out(scroller_out[2]),
   .out(bpldata[2])
 );
 
@@ -489,6 +633,8 @@ denise_bitplane_shifter bplshft3
   .aga(aga),
   .data_in(bpl3dat),
   .scroll(pf1h_del),
+  .scroller_in(scroller_in[3]),
+  .scroller_out(scroller_out[3]),
   .out(bpldata[3])
 );
 
@@ -505,6 +651,8 @@ denise_bitplane_shifter bplshft4
   .aga(aga),
   .data_in(bpl4dat),
   .scroll(pf2h_del),
+  .scroller_in(scroller_in[4]),
+  .scroller_out(scroller_out[4]),
   .out(bpldata[4])
 );
 
@@ -521,6 +669,8 @@ denise_bitplane_shifter bplshft5
   .aga(aga),
   .data_in(bpl5dat),
   .scroll(pf1h_del),
+  .scroller_in(scroller_in[5]),
+  .scroller_out(scroller_out[5]),
   .out(bpldata[5])
 );
 
@@ -537,6 +687,8 @@ denise_bitplane_shifter bplshft6
   .aga(aga),
   .data_in(bpl6dat),
   .scroll(pf2h_del),
+  .scroller_in(scroller_in[6]),
+  .scroller_out(scroller_out[6]),
   .out(bpldata[6])
 );
 
@@ -553,6 +705,8 @@ denise_bitplane_shifter bplshft7
   .aga(aga),
   .data_in(bpl7dat),
   .scroll(pf1h_del),
+  .scroller_in(scroller_in[7]),
+  .scroller_out(scroller_out[7]),
   .out(bpldata[7])
 );
 
@@ -569,10 +723,51 @@ denise_bitplane_shifter bplshft8
   .aga(aga),
   .data_in(bpl8dat),
   .scroll(pf2h_del),
+  .scroller_in(scroller_in[8]),
+  .scroller_out(scroller_out[8]),
   .out(bpldata[8])
 );
 
-`endif
 
 endmodule
 
+`endif
+
+module denise_scroll_history (
+  input        clk,
+  input        shift,
+  input  [7:0] pixel,
+  input  [5:0] select1,
+  input  [5:0] select2,
+  output [7:0] out
+);
+
+reg [5:0] wrptr = 0;
+
+reg [3:0] odd_mem[0:63] /* synthesis syn_ramstyle="distributed" */;
+reg [3:0] even_mem[0:63] /* synthesis syn_ramstyle="distributed" */;
+
+integer history_init;
+
+initial begin
+  for (history_init = 0; history_init < 64; history_init = history_init + 1) begin
+    odd_mem[history_init] = 0;
+    even_mem[history_init] = 0;
+  end
+end
+
+wire [5:0] rd1 = wrptr - 6'd1 - select1;
+wire [5:0] rd2 = wrptr - 6'd1 - select2;
+
+always @(posedge clk) begin
+  if(shift) begin
+    odd_mem[wrptr]  <= {pixel[6],pixel[4],pixel[2],pixel[0]};
+    even_mem[wrptr] <= {pixel[7],pixel[5],pixel[3],pixel[1]};
+    wrptr           <= wrptr + 1'b1;
+  end
+end
+
+assign {out[6],out[4],out[2],out[0]} = odd_mem[rd1];
+assign {out[7],out[5],out[3],out[1]} = even_mem[rd2];
+
+endmodule

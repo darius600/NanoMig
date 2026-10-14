@@ -41,14 +41,15 @@ module denise (
   input  wire [ 48-1:0] chip48,         // big chipram read
   output wire [ 16-1:0] data_out,       // bus data out
   input  wire           blank,          // blanking input
+  output wire           blank_out,      // blanking output
   output wire [  8-1:0] red,            // red componenent video out
   output wire [  8-1:0] green,          // green component video out
   output wire [  8-1:0] blue,           // blue component video out
   input  wire           a1k,            // control EHB chipset feature
   input  wire           ecs,            // enables ECS chipset features
   input  wire           aga,            // enables AGA features
-  output wire           hires,          // hires
-  output wire           shres           // shres
+  output wire           hires,
+  output wire           shres
 );
 
 
@@ -90,16 +91,17 @@ wire  [15:0] rgb_out;      // RGB data_out (rdram)
 
 reg    display_ena;          // in OCS sprites are visible between first write to BPL1DAT and end of scanline
 
-`ifdef DENISE_EBR
-reg   [63:0] data64_in_r;
-
-reg   [15:0] chip16_r;
-reg    [1:0] chip16_idx;
-
 //--------------------------------------------------------------------------------------
 
 // data out multiplexer
 assign data_out = col_out | deniseid_out | rgb_out;
+
+`ifdef DENISE_EBR
+// Serialize the CHIP fetch for the EBR bitplane and sprite buffers.
+reg   [63:0] data64_in_r;
+
+reg   [15:0] chip16_r;
+reg    [1:0] chip16_idx;
 
 // register full 64-bit word for sprites and bitplanes
 always @ (posedge clk) begin
@@ -123,16 +125,14 @@ always @(*) begin
     default: ;
   endcase
 end
-`else
-//--------------------------------------------------------------------------------------
-
-// data out multiplexer
-assign data_out = col_out | deniseid_out | rgb_out;
 `endif
 
 //--------------------------------------------------------------------------------------
 
 // Denise horizontal counter counting range: $01-$E3 CCKs (2-455 lores pixels)
+// AMR - this counter should run from 2 to 0x1c7, except on OCS Denise where it's freerunning during serration/equalisation pulses.
+// (Ray of Hope 2's DIW is enabled accidentally during this freerunning period, but also on KS 3 due to its odd initial copperlist.)
+
 always @(posedge clk)
   if (clk7_en) begin
     if (strhor)
@@ -144,9 +144,13 @@ always @(posedge clk)
 //--------------------------------------------------------------------------------------
 
 // sprite display enable signal - sprites are visible after the first write to the BPL1DAT register in a scanline
+
+// AMR - the delayed blank signal was causing this to be cleared again after the first write to BPL1DAT had set it.
+reg blank_d;
 always @(posedge clk)
   if (clk7_en) begin
-    if (reset || blank)
+    blank_d<=blank;
+    if (reset || (blank & !blank_d)) // rising edge of blank
       display_ena <= 0;
     else if (reg_address_in[8:1]==BPL1DAT[8:1])
       display_ena <= 1;
@@ -154,18 +158,16 @@ always @(posedge clk)
 
 // BPLCON0 register
 reg  [16-1:0] bplcon0;    // bplcon0 register
-//wire          hires;      // hires (640*200/640*400 interlace) mode
 wire [ 4-1:0] bpu;        // bit planes used
 wire          ham;        // hold and modify mode
 wire          dpf;        // double playfield mode
-//wire          color;      // color burst output signal
-//wire          gaud;       // genlock audio enable
-//wire          uhres;      // ultra-hires enables the UHRES pointers; needs bits in DMACON also
-//wire          shres;      // super-hires mode
-//wire          bypass;     // bypass color table; 8-bit wide data appears on r[7:0]
-//wire          lpen;       // light pen enable
-//wire          lace;       // interlace enable
-//wire          ersy;       // external resync
+wire          color;      // color burst output signal
+wire          gaud;       // genlock audio enable
+wire          uhres;      // ultra-hires enables the UHRES pointers; needs bits in DMACON also
+wire          bypass;     // bypass color table; 8-bit wide data appears on r[7:0]
+wire          lpen;       // light pen enable
+wire          lace;       // interlace enable
+wire          ersy;       // external resync
 wire          ecsena;     // disables BRDRBLNK,BRDNTRAN,ZDCLKEN,BRDSPRT, and EXTBLKEN bits in BPLCON3
 
 always @ (posedge clk) begin
@@ -181,14 +183,14 @@ assign hires    = bplcon0[15];
 assign bpu      = {bplcon0[4] & aga, bplcon0[14:12]};
 assign ham      = bplcon0[11];
 assign dpf      = bplcon0[10];
-//assign color    = bplcon0[9];
-//assign gaud     = bplcon0[8];
-//assign uhres    = bplcon0[7];
+assign color    = bplcon0[9];
+assign gaud     = bplcon0[8];
+assign uhres    = bplcon0[7];
 assign shres    = bplcon0[6];
-//assign bypass   = bplcon0[5];
-//assign lpen     = bplcon0[3];
-//assign lace     = bplcon0[2];
-//assign ersy     = bplcon0[1];
+assign bypass   = bplcon0[5];
+assign lpen     = bplcon0[3];
+assign lace     = bplcon0[2];
+assign ersy     = bplcon0[1];
 assign ecsena   = bplcon0[0];
 
 // bpu is updated when bpl1dat register is written
@@ -217,12 +219,10 @@ always @(posedge clk) begin
 end
 
 assign rdram = bplcon2[8] & aga;
-`ifdef DENISE_EBR
 assign rgb_out = (reg_address_in[8:6] == COLORBASE[8:6]) && rdram
                    ? {4'b0000, loct ? {clut_rgb[19:16], clut_rgb[11:8], clut_rgb[3:0]}
                                     : {clut_rgb[23:20], clut_rgb[15:12], clut_rgb[7:4]}}
                    : 16'h0000;
-`endif
 assign killehb = bplcon2[9] & ecs;
 
 // BPLCON3 register
@@ -232,10 +232,10 @@ wire [ 3-1:0] pf2of;      // bitplane color table offset when playfield 2 has pr
 wire          loct;       // 12-bit color palette select
 wire [ 2-1:0] spres;      // sprite resolution select
 wire          brdrblnk;   // border blank enable; disabled when ECSENA is low
-//wire          brdntran;   // border area is non-transparent; disabled when ECSENA is low
-//wire          zdclken;    // zd pin ??
+wire          brdntran;   // border area is non-transparent; disabled when ECSENA is low
+wire          zdclken;    // zd pin ??
 wire          brdsprt;    // enable srpites outside the display window; disabled when ECSENA is low
-//wire          extblken;   // causes blank output to be programmable; disabled when ECSENA is low
+wire          extblken;   // causes blank output to be programmable; disabled when ECSENA is low
 
 always @(posedge clk) begin
   if (clk7_en) begin
@@ -251,10 +251,10 @@ assign pf2of    = bplcon3[12:10];
 assign loct     = bplcon3[9] & aga;
 assign spres    = bplcon3[7:6] & {2{aga}};
 assign brdrblnk = bplcon3[5] & ecsena;
-//assign brdntran = bplcon3[4] & ecsena;
-//assign zdclken  = bplcon3[2] & ecsena;
+assign brdntran = bplcon3[4] & ecsena;
+assign zdclken  = bplcon3[2] & ecsena;
 assign brdsprt  = bplcon3[1] & ecsena;
-//assign extblken = bplcon3[0] & ecsena;
+assign extblken = bplcon3[0] & ecsena;
 
 // BPLCON4 register
 reg  [16-1:0] bplcon4;    // bplcon3 register
@@ -271,15 +271,28 @@ always @(posedge clk) begin
   end
 end
 
-// BPLCON4 values are supposedly delayed for 1 lores pixel TODO check this!
+
+// BPLCON4 values are delayed for 1 lores pixel - TODO double-check this!
+// AMR - bplxor is active from first write to BPL1DAT until DIWSTOP. (Fixes Andromeda: Nexus 7, shade cluster part)
+
+always @ (posedge clk) begin
+  if (clk7_en) begin
+    if(reset || hpos[8:0]==hdiwstop[8:0])
+      bplxor   <= 8'd0;
+	else if (display_ena)
+      bplxor   <= bplcon4[15:8];
+  end
+end
+
+
+// AMR - FIXME - should be the sprite colour offsets be treated as per bplxor? Probably not since sprites can appear in the border.
+
 always @ (posedge clk) begin
   if (clk7_en) begin
     if (reset) begin
-      bplxor   <= 8'd0;
       esprm    <= 4'd1;
       osprm    <= 4'd1;
     end else begin
-      bplxor   <= bplcon4[15:8];
       esprm    <= bplcon4[7:4];
       osprm    <= bplcon4[3:0];
     end
@@ -325,6 +338,8 @@ assign deniseid_out = reg_address_in[8:1]==DENISEID[8:1] ? aga ? 16'h00f8 : ecs 
 
 // generate window enable signal
 // true when beamcounter satisfies horizontal diwstrt/diwstop limits
+// AMR - DIWSTART should win here - FIXME - revisit the border blanking problem.
+
 always @(posedge clk)
   if (clk7_en) begin
     if (hpos[8:0]==hdiwstrt[8:0])
@@ -342,6 +357,7 @@ always @(posedge clk)
 //--------------------------------------------------------------------------------------
 
 // instantiate bitplane module
+`ifdef DENISE_EBR
 denise_bitplanes bplm0
 (
   .clk(clk),
@@ -352,26 +368,45 @@ denise_bitplanes bplm0
   .aga(aga),
   .reg_address_in(reg_address_in),
   .data_in(data_in),
-`ifdef DENISE_EBR
   .chip16_r(chip16_r),
   .chip16_idx(chip16_idx),
-`else
-  .chip48(chip48),
-`endif
   .hires(hires),
   .shres(shres & ecs),
   .hpos(hpos),
   .bpldata(bpldata_out)
 );
+`else
+denise_bitplanes bplm0
+(
+  .clk(clk),
+  .clk7_en(clk7_en),
+  .reset(reset),
+  .c1(c1),
+  .c3(c3),
+  .aga(aga),
+  .reg_address_in(reg_address_in),
+  .data_in(data_in),
+  .chip48(chip48),
+  .hires(hires),
+  .shres(shres & ecs),
+  .hpos(hpos),
+  .bpldata(bpldata_out)
+);
+`endif
 
-assign bpldata[1] = l_bpu > 0 ? bpldata_out[1] : 1'b0;
-assign bpldata[2] = l_bpu > 1 ? bpldata_out[2] : 1'b0;
-assign bpldata[3] = l_bpu > 2 ? bpldata_out[3] : 1'b0;
-assign bpldata[4] = l_bpu > 3 ? bpldata_out[4] : 1'b0;
-assign bpldata[5] = l_bpu > 4 ? bpldata_out[5] : 1'b0;
-assign bpldata[6] = l_bpu > 5 ? bpldata_out[6] : 1'b0;
-assign bpldata[7] = l_bpu > 6 ? bpldata_out[7] : 1'b0;
-assign bpldata[8] = l_bpu > 7 ? bpldata_out[8] : 1'b0;
+// AMR - mask bpldata against window_ena, so that the HAM generator always receives
+// the background colour outside the display window, to prevent the HAM generator
+// reacting to pixels scrolled off the left hand side of the screen.
+// (HAM would arguably be more useful if it could react to those pixels!)
+// Fixes Desire: Hamazing's "Hambarger" scene.
+assign bpldata[1] = window_ena && (l_bpu > 0) ? bpldata_out[1] : 1'b0;
+assign bpldata[2] = window_ena && (l_bpu > 1) ? bpldata_out[2] : 1'b0;
+assign bpldata[3] = window_ena && (l_bpu > 2) ? bpldata_out[3] : 1'b0;
+assign bpldata[4] = window_ena && (l_bpu > 3) ? bpldata_out[4] : 1'b0;
+assign bpldata[5] = window_ena && (l_bpu > 4) ? bpldata_out[5] : 1'b0;
+assign bpldata[6] = window_ena && (l_bpu > 5) ? bpldata_out[6] : 1'b0;
+assign bpldata[7] = window_ena && (l_bpu > 6) ? bpldata_out[7] : 1'b0;
+assign bpldata[8] = window_ena && (l_bpu > 7) ? bpldata_out[8] : 1'b0;
 
 // instantiate playfield module
 denise_playfields plfm0
@@ -390,6 +425,7 @@ denise_playfields plfm0
 wire [1:0] spres_d;
 assign spres_d = (spres == 2'b00) ? shres ? 2'b10 : 2'b01 : spres;
 
+`ifdef DENISE_EBR
 denise_sprites sprm0
 (
   .clk(clk),
@@ -401,12 +437,8 @@ denise_sprites sprm0
   .reg_address_in(reg_address_in),
   .hpos(hpos),
   .data_in(data_in),
-`ifdef DENISE_EBR
   .chip16_r(chip16_r),
   .chip16_idx(chip16_idx),
-`else
-  .chip48(chip48),
-`endif
   .sprena(display_ena | brdsprt),
   .esprm(esprm),
   .osprm(osprm),
@@ -414,12 +446,34 @@ denise_sprites sprm0
   .nsprite(nsprite),
   .sprdata(sprdata)
 );
+`else
+denise_sprites sprm0
+(
+  .clk(clk),
+  .clk7_en(clk7_en),
+  .reset(reset),
+  .c1(c1),
+  .c3(c3),
+  .aga(aga),
+  .reg_address_in(reg_address_in),
+  .hpos(hpos),
+  .data_in(data_in),
+  .chip48(chip48),
+  .sprena(display_ena | brdsprt),
+  .esprm(esprm),
+  .osprm(osprm),
+  .spres(spres_d),
+  .nsprite(nsprite),
+  .sprdata(sprdata)
+);
+`endif
 
 // instantiate video priority logic module
+wire [2:1] nplayfield_masked = nplayfield & {window_ena,window_ena};
 denise_spritepriority spm0
 (
   .bplcon2(bplcon2[5:0]),
-  .nplayfield(nplayfield),
+  .nplayfield(nplayfield_masked),
   .nsprite(nsprite),
   .sprsel(sprsel)
 );
@@ -429,13 +483,6 @@ wire  [24-1:0] clut_rgb;    // colour table rgb data out
 wire           ehb_en;      // ehb enable
 
 assign ehb_en = !killehb && !a1k && !ham && !dpf && (l_bpu == 4'd6);
-`ifndef DENISE_EBR
-
-assign rgb_out = (reg_address_in[8:6] == COLORBASE[8:6]) && rdram
-                   ? {4'b0000, loct ? {clut_rgb[19:16], clut_rgb[11:8], clut_rgb[3:0]}
-                                    : {clut_rgb[23:20], clut_rgb[15:12], clut_rgb[7:4]}}
-                   : 16'h0000;
-`endif
 
 denise_colortable clut0
 (
@@ -512,11 +559,11 @@ wire  [24-1:0] out_rgb  = ham_sel && window_del && !sprsel_del ? ham_rgb : clut_
 
 wire t_blank;
 
-assign t_blank = /*blank |*/ (ecs & ecsena & brdrblnk & (~window_del | ~display_ena));
+assign t_blank = blank | ecs & ecsena & brdrblnk & (~window_del | ~display_ena);
 
 // RGB video output
 assign {red[7:0],green[7:0],blue[7:0]} = t_blank ? 24'h000000 : out_rgb;
 
+assign blank_out = t_blank;
 
 endmodule
-

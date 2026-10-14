@@ -30,6 +30,17 @@ module sysctrl #(
 
   output reg	    jtagsel, // FPGA Companion requests activation of JTAG
 
+`ifdef ENABLE_AT_MODEM
+  // IO port interface (serial port / virtual AT modem)
+  input [31:0]	    port_status, // status bits to report additional info about the port
+  input [7:0]	    port_out_available, // number of bytes available for transmission to MCU
+  output reg	    port_out_strobe,
+  input [7:0]	    port_out_data,
+  input [7:0]	    port_in_available, // number of unused bytes in the input buffer
+  output reg	    port_in_strobe,
+  output reg [7:0]  port_in_data,
+`endif
+
 `ifdef ENABLE_RTC
   output reg [11:0] rtc, // toggle bit, 3 bit index, 8 bit data
 `endif
@@ -94,6 +105,12 @@ initial $readmemh("amiga_xml.hex", amiga_xml);
 reg [7:0] rtc_cmd;
 `endif
 
+`ifdef ENABLE_AT_MODEM
+reg       port_out_availableD;
+reg [7:0] port_cmd;
+reg [7:0] port_index;
+`endif
+
 always @(posedge clk)
      menu_rom_data <= amiga_xml[menu_rom_addr];
 
@@ -115,6 +132,10 @@ always @(posedge clk) begin
       jtagsel <= 1'b0;
 `ifdef ENABLE_RTC
       rtc <= 12'h000;
+`endif
+`ifdef ENABLE_AT_MODEM
+      port_out_strobe <= 1'b0;
+      port_in_strobe <= 1'b0;
 `endif
 
       // OSD value defaults. These should be sane defaults, but the MCU
@@ -161,6 +182,16 @@ always @(posedge clk) begin
 
       // iack bit 0 acknowledges the coldboot notification
       if(int_ack[0]) sys_int <= 1'b0;
+
+`ifdef ENABLE_AT_MODEM
+      port_out_strobe <= 1'b0;
+      port_in_strobe <= 1'b0;
+
+      // (further) data has just become available, so raise interrupt
+      port_out_availableD <= (port_out_available != 8'd0);
+      if(port_out_available != 8'd0 && !port_out_availableD)
+	sys_int <= 1'b1;
+`endif
 
       // monitor buttons for changes and raise interrupt
       if(buttons_irq_enable) begin
@@ -281,12 +312,18 @@ always @(posedge clk) begin
             // CMD 6: read system interrupt source
             if(command == 8'd6) begin
                 // bit[0]: coldboot flag
+	        // bit[1]: port data is available
 	        // bit[2]: buttons state change has been detected
+`ifdef ENABLE_AT_MODEM
+                data_out <= { 5'b0000, !buttons_irq_enable, (port_out_available != 8'd0), coldboot };
+`else
                 data_out <= { 5'b0000, !buttons_irq_enable, 1'b0, coldboot };
+`endif
                 // reading the interrupt source acknowledges the coldboot notification
                 if(state == 4'd0) coldboot <= 1'b0;
             end
 
+`ifdef ENABLE_AT_MODEM
 	    // CMD 7: port command (e.g. rs232)
             if(command == 8'd7) begin
 
@@ -337,6 +374,7 @@ always @(posedge clk) begin
 		  
 	       end
             end // if (command == 8'd7)
+`endif
 
             // CMD 8: read (menu) config
             if(command == 8'd8) begin

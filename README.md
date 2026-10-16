@@ -23,6 +23,7 @@ Current state:
   * Keyboard and mouse via USB
   * Joysticks via USB or DB9 ports 
   * Up to two virtual IDE hard disks, read and write support
+  * Serial AT modem emulation giving the core basic networking support to a simple AT command interface similar to classic telephone modems
   * FTP access to SD-Card via Network (optional)
   * NTP time synchronisation via Network (optional)
   * Runs on

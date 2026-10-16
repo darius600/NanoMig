@@ -23,9 +23,10 @@ Current state:
   * Keyboard and mouse via USB
   * Joysticks via USB or DB9 ports 
   * Up to two virtual IDE hard disks, read and write support
-  * Serial AT modem emulation giving the core basic networking support to a simple AT command interface similar to classic telephone modems
+  * Serial AT modem emulation giving the core basic networking support to a simple AT command interface similar to classic telephone modems  
   * FTP access to SD-Card via Network (optional)
-  * NTP time synchronisation via Network (optional)
+  * NTP time synchronisation via Network (optional)  
+  * Telnet allows to read log and debug info from the companion  
   * Runs on
      - [Tang Nano 20k](https://wiki.sipeed.com/hardware/en/tang/tang-nano-20k/nano-20k.html)  
      - [Primer 25K](https://wiki.sipeed.com/hardware/en/tang/tang-primer-25k/primer-25k.html)  

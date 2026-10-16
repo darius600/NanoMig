@@ -30,6 +30,17 @@ module sysctrl #(
 
   output reg	    jtagsel, // FPGA Companion requests activation of JTAG
 
+`ifdef ENABLE_AT_MODEM
+  // IO port interface (serial port / virtual AT modem)
+  input [31:0]	    port_status, // status bits to report additional info about the port
+  input [7:0]	    port_out_available, // number of bytes available for transmission to MCU
+  output reg	    port_out_strobe,
+  input [7:0]	    port_out_data,
+  input [7:0]	    port_in_available, // number of unused bytes in the input buffer
+  output reg	    port_in_strobe,
+  output reg [7:0]  port_in_data,
+`endif
+
 `ifdef ENABLE_RTC
   output reg [11:0] rtc, // toggle bit, 3 bit index, 8 bit data
 `endif
@@ -94,6 +105,12 @@ initial $readmemh("amiga_xml.hex", amiga_xml);
 reg [7:0] rtc_cmd;
 `endif
 
+`ifdef ENABLE_AT_MODEM
+reg       port_out_availableD;
+reg [7:0] port_cmd;
+reg [7:0] port_index;
+`endif
+
 always @(posedge clk)
      menu_rom_data <= amiga_xml[menu_rom_addr];
 
@@ -115,6 +132,10 @@ always @(posedge clk) begin
       jtagsel <= 1'b0;
 `ifdef ENABLE_RTC
       rtc <= 12'h000;
+`endif
+`ifdef ENABLE_AT_MODEM
+      port_out_strobe <= 1'b0;
+      port_in_strobe <= 1'b0;
 `endif
 
       // OSD value defaults. These should be sane defaults, but the MCU
@@ -161,6 +182,16 @@ always @(posedge clk) begin
 
       // iack bit 0 acknowledges the coldboot notification
       if(int_ack[0]) sys_int <= 1'b0;
+
+`ifdef ENABLE_AT_MODEM
+      port_out_strobe <= 1'b0;
+      port_in_strobe <= 1'b0;
+
+      // (further) data has just become available, so raise interrupt
+      port_out_availableD <= (port_out_available != 8'd0);
+      if(port_out_available != 8'd0 && !port_out_availableD)
+	sys_int <= 1'b1;
+`endif
 
       // monitor buttons for changes and raise interrupt
       if(buttons_irq_enable) begin
@@ -281,13 +312,69 @@ always @(posedge clk) begin
             // CMD 6: read system interrupt source
             if(command == 8'd6) begin
                 // bit[0]: coldboot flag
+	        // bit[1]: port data is available
 	        // bit[2]: buttons state change has been detected
+`ifdef ENABLE_AT_MODEM
+                data_out <= { 5'b0000, !buttons_irq_enable, (port_out_available != 8'd0), coldboot };
+`else
                 data_out <= { 5'b0000, !buttons_irq_enable, 1'b0, coldboot };
+`endif
                 // reading the interrupt source acknowledges the coldboot notification
                 if(state == 4'd0) coldboot <= 1'b0;
             end
 
-	    // CMD 7: port in/out, currently unused in amiga
+`ifdef ENABLE_AT_MODEM
+	    // CMD 7: port command (e.g. rs232)
+            if(command == 8'd7) begin
+
+	       // the first two bytes of a port command always have the same meaning ...
+               if(state == 4'd0) begin
+		  // first byte is the subcommand
+		  port_cmd <= data_in;
+		  // return the number of ports implemented in this core
+		  data_out <= 8'd1;
+	       end else if(state == 4'd1) begin
+		  // second byte is the port index (if several ports are supported)
+		  port_index <= data_in;
+		  // return port type (currently supports only 0=serial)
+		  data_out <= 8'd0;
+	       end else begin
+		  // ... further bytes are subcommand specific
+
+		  // port subcommand 0: get status
+		  if(port_cmd == 8'd0 && port_index == 8'd0) begin
+		     if(state == 4'd2)       data_out <= port_out_available;
+		     else if(state == 4'd3)  data_out <= port_in_available;
+		     // port status for type 0 (serial) is still close to the format
+		     // that was introduced with the first MiST
+		     else if(state == 4'd4)  data_out <= port_status[31:24];  // bitrate[7:0]
+		     else if(state == 4'd5)  data_out <= port_status[23:16];  // bitrate[15:8]
+		     else if(state == 4'd6)  data_out <= port_status[15:8];   // bitrate[23:16]
+		     else if(state == 4'd7)  data_out <= port_status[7:0];    // databits, parity and stopbits
+		     else                    data_out <= 8'h00;
+		  end
+		  
+		  // port subcommand 1: read port data
+		  else if(port_cmd == 8'd1 && port_index == 8'd0) begin
+		     data_out <= port_out_data;
+
+		     // reading the byte ack's the mfp's fifo. Since the
+		     // data arrives with one byte delay at the MCU we need
+		     // to make sure that the last read will not trigger
+		     // another fifo read. The MCU will thus not set bit[0] for
+		     // the last read to suppress the fifo read
+		     port_out_strobe <= data_in[0];
+		  end
+		  
+		  // port subcommand 2: write port data
+		  else if(port_cmd == 8'd2 && port_index == 8'd0) begin
+		     port_in_data <= data_in;
+		     port_in_strobe <= 1'b1;
+		  end
+		  
+	       end
+            end // if (command == 8'd7)
+`endif
 
             // CMD 8: read (menu) config
             if(command == 8'd8) begin

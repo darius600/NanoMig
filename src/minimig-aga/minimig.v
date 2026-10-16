@@ -189,6 +189,11 @@ module minimig
 	//rs232 pins
 	input	      rxd, // rs232 receive
 	output	      txd, // rs232 send
+`ifdef ENABLE_AT_MODEM
+	output [14:0] uart_serper, // paula SERPER (baud rate)
+	output	      uart_rbf,    // paula receive buffer full
+	input	      uart_hold,   // hold paula transmitter
+`endif
 	input	      cts, // rs232 clear to send
 	output	      rts, // rs232 request to send
 	output	      dtr, // rs232 Data Terminal Ready
@@ -498,6 +503,11 @@ paula PAULA1
 	.data_out(paula_data_out),
 	.txd(txd),
 	.rxd(rxd),
+`ifdef ENABLE_AT_MODEM
+	.uart_serper(uart_serper),
+	.uart_rbf(uart_rbf),
+	.uart_hold(uart_hold),
+`endif
 	.ntsc(ntsc),
 	.sof(sof),
 	.strhor(strhor_paula),

@@ -55,6 +55,18 @@ module nanomig (
    output	 uart_tx,
    input	 uart_rx,
 
+`ifdef ENABLE_AT_MODEM
+   // serial port as byte stream to/from the MCU (virtual AT modem of the
+   // FPGA Companion). Replaces the uart_rx pin.
+   output [31:0] serial_status,
+   output [7:0]  serial_tx_available,
+   input	 serial_tx_strobe,
+   output [7:0]  serial_tx_data,
+   output [7:0]  serial_rx_available,
+   input	 serial_rx_strobe,
+   input [7:0]	 serial_rx_data,
+`endif
+
 `ifdef ENABLE_RTC
    // RTC time information as e.g. received via NTP
    input [11:0]	 rtc,
@@ -1442,6 +1454,35 @@ wire [15:0] ramdata_in_ext = int_rom_sel?romD:
 wire [15:0] ramdata_in_ext = ramdata_in;
 `endif
 
+`ifdef ENABLE_AT_MODEM
+// bridge between the serial port of paula and the virtual AT modem in the
+// FPGA Companion (byte stream via sysctrl port commands)
+wire [14:0] at_serper;
+wire        at_rbf;
+wire        at_hold;
+wire        at_rxd;
+
+uart_port uart_port (
+  .clk                 ( clk_sys ),
+  .clk7_en             ( clk7_en ),
+  .reset               ( reset_d ),
+
+  .serper              ( at_serper ),
+  .rbf                 ( at_rbf ),
+  .txd                 ( uart_tx ),
+  .rxd                 ( at_rxd ),
+  .hold                ( at_hold ),
+
+  .serial_status       ( serial_status ),
+  .serial_tx_available ( serial_tx_available ),
+  .serial_tx_strobe    ( serial_tx_strobe ),
+  .serial_tx_data      ( serial_tx_data ),
+  .serial_rx_available ( serial_rx_available ),
+  .serial_rx_strobe    ( serial_rx_strobe ),
+  .serial_rx_data      ( serial_rx_data )
+);
+`endif
+
 minimig minimig
 (
 	//m68k pins
@@ -1490,8 +1531,16 @@ minimig minimig
         .ovl          (ovl              ),   
 
 	//rs232 pins
+`ifdef ENABLE_AT_MODEM
+	.rxd          (at_rxd           ), // RS232 receive (from AT modem bridge)
+	.txd          (uart_tx          ), // RS232 send
+	.uart_serper  (at_serper        ),
+	.uart_rbf     (at_rbf           ),
+	.uart_hold    (at_hold          ),
+`else
 	.rxd          (uart_rx          ), // RS232 receive
 	.txd          (uart_tx          ), // RS232 send
+`endif
 	.cts          (1'b0             ), // RS232 clear to send (0=ready to receive)
 	.rts          (                 ), // RS232 request to send
 	.dtr          (                 ), // RS232 Data Terminal Ready

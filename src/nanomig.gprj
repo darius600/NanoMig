@@ -82,7 +82,9 @@
         <File path="misc/sd_rw.v" type="file.verilog" enable="1"/>
         <File path="misc/sdcmd_ctrl.v" type="file.verilog" enable="1"/>
         <File path="misc/sdram.sv" type="file.verilog" enable="1"/>
+        <File path="misc/io_fifo.v" type="file.verilog" enable="1"/>
         <File path="misc/sysctrl.v" type="file.verilog" enable="1"/>
+        <File path="misc/uart_port.v" type="file.verilog" enable="1"/>
         <File path="misc/video_analyzer.v" type="file.verilog" enable="1"/>
         <File path="misc/ws2812.v" type="file.verilog" enable="1"/>
         <File path="nanomig.v" type="file.verilog" enable="1"/>
